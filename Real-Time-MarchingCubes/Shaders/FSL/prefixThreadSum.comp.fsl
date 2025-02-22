@@ -1,0 +1,65 @@
+
+#include "../../../../Common_3/Graphics/ShaderUtilities.h.fsl"
+#include "resources.h.fsl"
+
+ROOT_SIGNATURE(ComputeRootSignature) // Define root signature
+//NUM_THREADS(8, 8, 8) // Each thread group has 512 threads
+NUM_THREADS(BLOCK_SIZE, 1, 1)
+/* 
+This shader computes the prefix sum of threads inside each block
+First subpass of prefix sum pipelines
+*/
+
+
+void CS_MAIN(SV_DispatchThreadID(uint3) dispatchThreadID, SV_GroupThreadID(uint3) groupThreadID, SV_GroupID(uint3) groupID)
+{
+    INIT_MAIN; 
+
+ 
+    uint globalIndex = dispatchThreadID.x;
+    uint localIndex  = groupThreadID.x;
+  //  uint blockStart  = groupId.x * 256;  
+
+ 
+    // Load one element per thread (or zero if past end)
+    if (globalIndex < NUM_ELEMENTS)
+        gScratchBuffer[globalIndex] = gTriangleCountBuffer[globalIndex];
+    else     
+    {  
+       gScratchBuffer[globalIndex] = 0;
+       RETURN(); 
+       }
+        
+
+    GroupMemoryBarrierWithGroupSync();
+    
+    // A simple inclusive scan (Hillis–Steele). 
+    for (uint offset = 1; offset < BLOCK_SIZE; offset *= 2)
+    {
+        uint temp = 0;
+        if (localIndex >= offset)
+            temp = gScratchBuffer[globalIndex - offset];
+        GroupMemoryBarrierWithGroupSync();
+        gScratchBuffer[globalIndex] += temp;
+        GroupMemoryBarrierWithGroupSync();
+    }
+    
+    // Write the scanned data back to global memory.
+  //  if (globalIndex < NUM_ELEMENTS)
+        gPrefixSumBuffer[globalIndex] = gScratchBuffer[globalIndex];
+    
+    // The last element in the block holds the block’s total sum.
+    if (localIndex == BLOCK_SIZE - 1 ){
+       
+        gBlockSums[groupID.x] = gScratchBuffer[globalIndex];
+        }
+
+    // handle for the last block whose threads less than block size (256)
+    if(globalIndex == NUM_ELEMENTS - 1) {
+      gBlockSums[groupID.x] = gScratchBuffer[globalIndex];
+    }
+     
+    
+
+    RETURN(); 
+}

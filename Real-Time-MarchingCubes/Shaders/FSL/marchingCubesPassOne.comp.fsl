@@ -1,0 +1,64 @@
+
+#include "../../../../Common_3/Graphics/ShaderUtilities.h.fsl"
+#include "resources.h.fsl"
+
+ROOT_SIGNATURE(ComputeRootSignature) // Define root signature
+NUM_THREADS(8, 8, 8) // Each thread group has 512 threads
+
+/* 
+This shader (marching cubes pass one) 
+compute the number of triangles 
+that will be produced for each voxel
+*/
+void CS_MAIN(SV_DispatchThreadID(uint3) threadID)
+{
+    INIT_MAIN; 
+
+
+    uint x = threadID.x;
+    uint y = threadID.y;
+    uint z = threadID.z;
+
+    
+     if (x >= (width - 1) || y >= (height - 1) || z >= (length - 1))
+       RETURN();
+
+    uint cellID = y * (width - 1) * (length - 1) + x * (length - 1) + z;
+
+    uint v0 = y * width * length + x * length + z;
+    uint v1 = y * width * length + x * length + z + 1;
+    uint v2 = y * width * length + (x + 1) * length + z + 1;
+    uint v3 = y * width * length + (x + 1) * length + z;
+
+    uint v4 = (y + 1) * width * length + x * length + z;
+    uint v5 = (y + 1) * width * length + x * length + z + 1;
+    uint v6 = (y + 1) * width * length + (x + 1) * length + z + 1;
+    uint v7 = (y + 1) * width * length + (x + 1) * length + z;
+
+    
+    uint caseIndex = 0;
+    float threshold = 0.001f;
+    if (gSDF[v0] < -threshold) caseIndex += 1;
+    if (gSDF[v1] < -threshold) caseIndex += 2;
+    if (gSDF[v2] < -threshold) caseIndex += 4;
+    if (gSDF[v3] < -threshold) caseIndex += 8;
+
+    if (gSDF[v4] < -threshold) caseIndex += 16;
+    if (gSDF[v5] < -threshold) caseIndex += 32;
+    if (gSDF[v6] < -threshold) caseIndex += 64;
+    if (gSDF[v7] < -threshold) caseIndex += 128;
+
+
+    uint numTriangles = 0;
+    for (int i = 0; i < 15; i += 3) { // Each set of 3 forms a triangle
+       
+       if (triTable[caseIndex][i] == -1) break; // -1 means "no more triangles"
+        numTriangles++;
+    
+    }
+    
+     gTriangleCountBuffer[cellID] = numTriangles;
+   // gTriangleCountBuffer[cellID] = caseIndex;
+
+    RETURN(); // Required return statement
+}

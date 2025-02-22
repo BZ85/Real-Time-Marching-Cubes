@@ -1,0 +1,22 @@
+
+#include "../../../../Common_3/Graphics/ShaderUtilities.h.fsl"
+#include "resources.h.fsl"
+
+
+
+ROOT_SIGNATURE(ComputeRootSignature) // Define root signature
+NUM_THREADS(8, 1, 1) // Each thread group has 8 threads
+
+void CS_MAIN(SV_DispatchThreadID(uint3) threadID)
+{
+    INIT_MAIN; // Required initialization
+
+    uint index = threadID.x; // Get global thread index
+
+    // Read input, process, and store in output
+     // gOutputBuffer[index] = gInputBuffer[index] * 2.0;
+      gOutputBuffer[index] = (float)edgeTable[index];
+    // gOutputBuffer[index] = (float)triTable[index][0];
+     gOutputBuffer[index] = height;
+    RETURN(); // Required return statement
+}

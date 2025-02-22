@@ -1,0 +1,196 @@
+
+#include "../../../../Common_3/Graphics/ShaderUtilities.h.fsl"
+#include "resources.h.fsl"
+
+/* 
+This compute shader (marching cubes pass two) 
+computes the vertices for each triangle of the 
+generated marching cubes ISO surfaces
+
+*/
+STRUCT(Vertex)
+{
+    DATA(float3, position, SV_Position);
+    DATA(float3, normal, NORMAL);
+};
+
+ROOT_SIGNATURE(ComputeRootSignature) // Define root signature
+
+// calculate the intersection point using interpolation
+Vertex vertexInterpolate(Vertex v1, Vertex v2, float val1, float val2)
+{
+
+    float isoValue = 0.0f;
+
+    // prevent the surface crack due to floating accuracy
+    if (abs(isoValue - val1) < 0.00001)
+        return(v1);
+    if (abs(isoValue - val2) < 0.00001)
+        return(v2);
+    if (abs(val1 - val2) < 0.00001)
+        return(v1);
+
+    float factor = (isoValue - val1) / (val2 - val1);
+    Vertex v;
+    v.position = lerp(v1.position, v2.position, factor);
+    v.normal = lerp(v1.normal, v2.normal, factor);
+
+    return v;
+}
+
+
+float3 computeNormal(uint x, uint y, uint z)
+{
+    // the normal of each grid vertex is the gradient 
+
+    uint v, vUp, vDown, vLeft, vRight, vFront, vBehind;
+    v = y * width * length + x * length + z;
+
+    if (y + 1 < height) vUp = (y + 1) * width * length + x * length + z;
+    else vUp = v;
+    if (y - 1 >= 0) vDown = (y - 1) * width * length + x * length + z;
+    else vDown = v;
+
+    if (z + 1 < length) vLeft = y * width * length + x * length + (z + 1);
+    else vLeft = v;
+    if (z - 1 >= 0) vRight = y * width * length + x * length + (z - 1);
+    else vRight = v;
+
+    if (x + 1 < width) vFront = y * width * length + (x + 1) * length + z;
+    else vFront = v;
+    if (x - 1 >= 0) vBehind = y * width * length + (x - 1) * length + z;
+    else vBehind = v;
+
+    float3 normal;
+
+    normal.x = (gSDF[vFront] - gSDF[vBehind]) / (160.0 / (width - 1));
+    normal.y = (gSDF[vUp] - gSDF[vDown]) / (160.0 / (height - 1));
+
+    // Because we use -z axis, the z coordinate of normal also needs to be multiply -1.0
+    normal.z = -1.0 * (gSDF[vLeft] - gSDF[vRight]) / (160.0 / (length - 1));
+
+   return normalize(normal);
+}
+
+float3 computeCubeCorner(uint x, uint y, uint z){
+
+  return float3(80.0 * x / (width - 1), 80.0 * y / (height - 1), -80.0 * z / (length - 1));
+
+}
+
+NUM_THREADS(8, 8, 8) // Each thread group has 512 threads
+void CS_MAIN(SV_DispatchThreadID(uint3) threadID)
+{
+    INIT_MAIN; 
+
+
+    uint x = threadID.x;
+    uint y = threadID.y;
+    uint z = threadID.z;
+
+    
+     if (x >= (width - 1) || y >= (height - 1) || z >= (length - 1))
+       RETURN();
+
+    uint cellID = y * (width - 1) * (length - 1) + x * (length - 1) + z;
+
+    // compute the indices of eight corner for retrieving the gSDF values
+    uint v0 = y * width * length + x * length + z;
+    uint v1 = y * width * length + x * length + z + 1;
+    uint v2 = y * width * length + (x + 1) * length + z + 1;
+    uint v3 = y * width * length + (x + 1) * length + z;
+
+    uint v4 = (y + 1) * width * length + x * length + z;
+    uint v5 = (y + 1) * width * length + x * length + z + 1;
+    uint v6 = (y + 1) * width * length + (x + 1) * length + z + 1;
+    uint v7 = (y + 1) * width * length + (x + 1) * length + z;
+
+    // create the list of eight corner vertices
+    Vertex cubeCorners[8];
+    cubeCorners[0].position = computeCubeCorner(x, y, z);
+    cubeCorners[1].position = computeCubeCorner(x, y, z + 1);
+    cubeCorners[2].position = computeCubeCorner(x + 1, y, z + 1);
+    cubeCorners[3].position = computeCubeCorner(x + 1, y, z);
+    cubeCorners[4].position = computeCubeCorner(x, y + 1, z);
+    cubeCorners[5].position = computeCubeCorner(x, y + 1, z + 1);
+    cubeCorners[6].position = computeCubeCorner(x + 1, y + 1, z + 1);
+    cubeCorners[7].position = computeCubeCorner(x+ 1, y + 1, z);
+    
+    cubeCorners[0].normal =  computeNormal(x, y, z);
+    cubeCorners[1].normal  = computeNormal(x, y, z + 1);
+    cubeCorners[2].normal  = computeNormal(x + 1, y, z + 1);
+    cubeCorners[3].normal  = computeNormal(x + 1, y, z);
+    cubeCorners[4].normal  = computeNormal(x, y + 1, z);
+    cubeCorners[5].normal  = computeNormal(x, y + 1, z + 1);
+    cubeCorners[6].normal  = computeNormal(x + 1, y + 1, z + 1);
+    cubeCorners[7].normal  = computeNormal(x+ 1, y + 1, z);
+
+    // compute case index
+    uint caseIndex = 0;
+    float threshold = 0.001f;
+    if (gSDF[v0] < -threshold) caseIndex += 1;
+    if (gSDF[v1] < -threshold) caseIndex += 2;
+    if (gSDF[v2] < -threshold) caseIndex += 4;
+    if (gSDF[v3] < -threshold) caseIndex += 8;
+
+    if (gSDF[v4] < -threshold) caseIndex += 16;
+    if (gSDF[v5] < -threshold) caseIndex += 32;
+    if (gSDF[v6] < -threshold) caseIndex += 64;
+    if (gSDF[v7] < -threshold) caseIndex += 128;
+
+    Vertex vertexList[12];
+
+    // compute vertices on the edges according to the edge table
+    if (edgeTable[caseIndex] & 1)    vertexList[0] = vertexInterpolate(cubeCorners[0], cubeCorners[1], gSDF[v0], gSDF[v1]);
+    if (edgeTable[caseIndex] & 2)    vertexList[1] = vertexInterpolate(cubeCorners[1], cubeCorners[2], gSDF[v1], gSDF[v2]);
+    if (edgeTable[caseIndex] & 4)    vertexList[2] = vertexInterpolate(cubeCorners[2], cubeCorners[3], gSDF[v2], gSDF[v3]);
+    if (edgeTable[caseIndex] & 8)    vertexList[3] = vertexInterpolate(cubeCorners[3], cubeCorners[0], gSDF[v3], gSDF[v0]);
+    
+    if (edgeTable[caseIndex] & 16)   vertexList[4] = vertexInterpolate(cubeCorners[4], cubeCorners[5], gSDF[v4], gSDF[v5]);
+    if (edgeTable[caseIndex] & 32)   vertexList[5] = vertexInterpolate(cubeCorners[5], cubeCorners[6], gSDF[v5], gSDF[v6]);
+    if (edgeTable[caseIndex] & 64)   vertexList[6] = vertexInterpolate(cubeCorners[6], cubeCorners[7], gSDF[v6], gSDF[v7]);
+    if (edgeTable[caseIndex] & 128)  vertexList[7] = vertexInterpolate(cubeCorners[7], cubeCorners[4], gSDF[v7], gSDF[v4]);
+
+    if (edgeTable[caseIndex] & 256)  vertexList[8] = vertexInterpolate(cubeCorners[0], cubeCorners[4], gSDF[v0], gSDF[v4]);
+    if (edgeTable[caseIndex] & 512)  vertexList[9] = vertexInterpolate(cubeCorners[1], cubeCorners[5], gSDF[v1], gSDF[v5]);
+    if (edgeTable[caseIndex] & 1024) vertexList[10] = vertexInterpolate(cubeCorners[2], cubeCorners[6], gSDF[v2], gSDF[v6]);
+    if (edgeTable[caseIndex] & 2048) vertexList[11] = vertexInterpolate(cubeCorners[3], cubeCorners[7], gSDF[v3], gSDF[v7]);
+   
+   // fill the triangle vertices positions and normals into the triangle buffer based on triangle table
+    // perfix sum is the numTriangles, multiplying 3 is numVertices, multiply 18 is numFloats
+    uint triangleOffset = gPrefixSumBuffer[cellID] * 3 * 3 * 2;
+  //  uint vertexCounter = triangleOffset * 3 * 3;
+    for (int i = 0; triTable[caseIndex][i] != -1; i += 3) {
+        int a0 = triTable[caseIndex][i];
+        int a1 = triTable[caseIndex][i + 1];
+        int a2 = triTable[caseIndex][i + 2];
+
+        // fill positions
+        gTriangleBuffer[triangleOffset++] = vertexList[a0].position.x;
+        gTriangleBuffer[triangleOffset++] = vertexList[a0].position.y;
+        gTriangleBuffer[triangleOffset++] = vertexList[a0].position.z;
+        
+        //fill normals
+        gTriangleBuffer[triangleOffset++] = vertexList[a0].normal.x;
+        gTriangleBuffer[triangleOffset++] = vertexList[a0].normal.y;
+        gTriangleBuffer[triangleOffset++] = vertexList[a0].normal.z;
+
+        gTriangleBuffer[triangleOffset++] = vertexList[a1].position.x;
+        gTriangleBuffer[triangleOffset++] = vertexList[a1].position.y;
+        gTriangleBuffer[triangleOffset++] = vertexList[a1].position.z;
+
+        gTriangleBuffer[triangleOffset++] = vertexList[a1].normal.x;
+        gTriangleBuffer[triangleOffset++] = vertexList[a1].normal.y;
+        gTriangleBuffer[triangleOffset++] = vertexList[a1].normal.z;
+
+        gTriangleBuffer[triangleOffset++] = vertexList[a2].position.x;
+        gTriangleBuffer[triangleOffset++] = vertexList[a2].position.y;
+        gTriangleBuffer[triangleOffset++] = vertexList[a2].position.z;
+
+        gTriangleBuffer[triangleOffset++] = vertexList[a2].normal.x;
+        gTriangleBuffer[triangleOffset++] = vertexList[a2].normal.y;
+        gTriangleBuffer[triangleOffset++] = vertexList[a2].normal.z;
+    }
+
+    RETURN(); // Required return statement
+}

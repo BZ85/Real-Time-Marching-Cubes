@@ -1,0 +1,49 @@
+
+#include "../../../../Common_3/Graphics/ShaderUtilities.h.fsl"
+#include "resources.h.fsl"
+
+ROOT_SIGNATURE(ComputeRootSignature) // Define root signature
+NUM_THREADS(1024, 1, 1)
+
+/* 
+This shader computes the prefix sums between the blocks (the unit is every block)
+Second subpass of prefix sum pipelines
+*/
+
+void CS_MAIN(SV_DispatchThreadID(uint3) dispatchThreadID, SV_GroupThreadID(uint3) groupThreadID)
+{
+    INIT_MAIN; 
+
+ 
+     uint index = dispatchThreadID.x;
+    // For threads beyond the block sums count, write 0.
+    if (index < NUM_BLOCKS)
+    {
+        gScratchBuffer[index] = gBlockSums[index];
+    }
+    else
+       RETURN(); 
+
+    GroupMemoryBarrierWithGroupSync();
+    
+    // Use a simple Hillis-Steele scan on the scratch buffer.
+    for (uint offset = 1; offset < 1024; offset *= 2)
+    {
+        uint temp = 0;
+        if (groupThreadID.x >= offset && (index >= offset))
+        {
+            temp = gScratchBuffer[index - offset];
+        }
+        GroupMemoryBarrierWithGroupSync();
+        gScratchBuffer[index] += temp;
+        GroupMemoryBarrierWithGroupSync();
+    }
+    
+    
+        gScannedBlockSums[index] = gScratchBuffer[index];
+   
+     
+    
+
+    RETURN(); 
+}

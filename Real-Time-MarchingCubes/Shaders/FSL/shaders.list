@@ -1,0 +1,56 @@
+#include "../../../../../../Common_3/Graphics/FSL/defaults.h"
+
+#rootsig default.rootsig
+#end
+
+#rootsig compute.rootsig
+#end
+
+#frag basic.frag
+#include "basic.frag.fsl"
+#end
+
+#vert FT_MULTIVIEW basic.vert
+#include "basic.vert.fsl"
+#end
+
+#frag skybox.frag
+#include "skybox.frag.fsl"
+#end
+
+#vert FT_MULTIVIEW skybox.vert
+#include "skybox.vert.fsl"
+#end
+
+#comp example.comp
+#include "example.comp.fsl"
+#end
+
+
+#comp marchingCubesPassOne.comp
+#include "marchingCubesPassOne.comp.fsl"
+#end
+
+#comp marchingCubesPassTwo.comp
+#include "marchingCubesPassTwo.comp.fsl"
+#end
+
+#comp prefixThreadSum.comp
+#include "prefixThreadSum.comp.fsl"
+#end
+
+#comp prefixBlockSum.comp
+#include "prefixBlockSum.comp.fsl"
+#end
+
+#comp prefixFinalSum.comp
+#include "prefixFinalSum.comp.fsl"
+#end
+
+#frag marchingCubes.frag
+#include "marchingCubes.frag.fsl"
+#end
+
+#vert marchingCubes.vert
+#include "marchingCubes.vert.fsl"
+#end

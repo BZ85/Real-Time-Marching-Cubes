@@ -1,0 +1,39 @@
+#include "../../../../../../Common_3/Graphics/FSL/defaults.h"
+
+#rootsig default.rootsig
+#end
+
+#rootsig compute.rootsig
+#end
+
+#frag basic.frag
+#include "basic.frag.fsl"
+#end
+
+#vert FT_MULTIVIEW basic.vert
+#include "basic.vert.fsl"
+#end
+
+#frag skybox.frag
+#include "skybox.frag.fsl"
+#end
+
+#vert FT_MULTIVIEW skybox.vert
+#include "skybox.vert.fsl"
+#end
+
+#frag octreeMarchingCubes.frag
+#include "octreeMarchingCubes.frag.fsl"
+#end
+
+#vert FT_MULTIVIEW octreeMarchingCubes.vert
+#include "octreeMarchingCubes.vert.fsl"
+#end
+
+#frag octreeWireframes.frag
+#include "octreeWireframes.frag.fsl"
+#end
+
+#vert FT_MULTIVIEW octreeWireframes.vert
+#include "octreeWireframes.vert.fsl"
+#end

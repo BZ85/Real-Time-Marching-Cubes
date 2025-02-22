@@ -1,0 +1,47 @@
+
+#include "../../../../Common_3/Graphics/ShaderUtilities.h.fsl"
+#include "resources.h.fsl"
+
+ROOT_SIGNATURE(ComputeRootSignature) // Define root signature
+
+NUM_THREADS(BLOCK_SIZE, 1, 1)
+
+/* 
+This shader is the last step of computing prefix sum, 
+just add the previous ScannedBlockSum (offset) to every entry
+
+Third (final) subpass of prefix sum pipelines
+*/
+
+void CS_MAIN(SV_DispatchThreadID(uint3) dispatchThreadID, SV_GroupThreadID(uint3) groupThreadID, SV_GroupID(uint3) groupID)
+{
+    INIT_MAIN; 
+
+    uint globalIndex = dispatchThreadID.x;
+    if (globalIndex > NUM_ELEMENTS - 1)
+        RETURN(); 
+    
+    // For the first block, no offset is needed.
+    if (groupID.x > 0)
+    {
+        // Get the offset from the scanned block sums (offset = sum of all previous blocks).
+        uint offset = gScannedBlockSums[groupID.x - 1];
+        gPrefixSumBuffer[globalIndex] += offset;
+    }
+
+   // change the inclusive prefix sum to the exclusive prefix sum
+     gPrefixSumBuffer[globalIndex] -= gTriangleCountBuffer[globalIndex];
+    
+    // store the number of vertices in total for sending to CPU and rendering (for CPU draw, abandoned way)
+    // Set the vertex number and other arguments for the indirect command buffer on GPU (for GPU indirect draw)
+    if(globalIndex == NUM_ELEMENTS - 1) {
+    gNumVerticesBuffer[0] = gPrefixSumBuffer[globalIndex] * 3;
+
+    gIndirectDrawArgBuffer[0] = gPrefixSumBuffer[globalIndex] * 3;
+    gIndirectDrawArgBuffer[1] = 1;
+    gIndirectDrawArgBuffer[2] = 0;
+    gIndirectDrawArgBuffer[3] = 0;
+    }
+
+    RETURN(); 
+}
